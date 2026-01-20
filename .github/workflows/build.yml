@@ -6,6 +6,9 @@ on:
       - 'v*'  # v1.0.0 같은 태그 푸시 시 실행
   workflow_dispatch:  # 수동 실행 가능
 
+permissions:
+  contents: write  # 릴리스 생성 권한
+
 jobs:
   build:
     strategy:
