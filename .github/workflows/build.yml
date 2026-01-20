@@ -1,0 +1,111 @@
+name: Build PDF to Excel App
+
+on:
+  push:
+    tags:
+      - 'v*'  # v1.0.0 같은 태그 푸시 시 실행
+  workflow_dispatch:  # 수동 실행 가능
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            artifact_name: pdf_to_excel.exe
+            asset_name: pdf_to_excel-windows.exe
+          - os: macos-latest
+            artifact_name: pdf_to_excel.app
+            asset_name: pdf_to_excel-macos.zip
+          - os: ubuntu-latest
+            artifact_name: pdf_to_excel
+            asset_name: pdf_to_excel-linux
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      # Linux용 추가 패키지
+      - name: Install Linux dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-tk
+
+      - name: Build with PyInstaller (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          pyinstaller --onefile --windowed --name pdf_to_excel pdf_to_excel.py
+
+      - name: Build with PyInstaller (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          pyinstaller --onefile --windowed --name pdf_to_excel pdf_to_excel.py
+          cd dist && zip -r pdf_to_excel-macos.zip pdf_to_excel.app
+
+      - name: Build with PyInstaller (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          pyinstaller --onefile --windowed --name pdf_to_excel pdf_to_excel.py
+
+      # 빌드 결과물 업로드
+      - name: Upload Windows artifact
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pdf_to_excel-windows
+          path: dist/pdf_to_excel.exe
+
+      - name: Upload macOS artifact
+        if: matrix.os == 'macos-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pdf_to_excel-macos
+          path: dist/pdf_to_excel-macos.zip
+
+      - name: Upload Linux artifact
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pdf_to_excel-linux
+          path: dist/pdf_to_excel
+
+  # 릴리스 생성 (태그 푸시 시에만)
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Display structure
+        run: ls -R artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            artifacts/pdf_to_excel-windows/pdf_to_excel.exe
+            artifacts/pdf_to_excel-macos/pdf_to_excel-macos.zip
+            artifacts/pdf_to_excel-linux/pdf_to_excel
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
